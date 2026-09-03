@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ReelRank</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{ --accent:#2563EB; --text:#fff; --muted:#9CA3AF; }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%; overflow:hidden; background:#000; font-family:'Inter',sans-serif;}
+  .app{ max-width:480px; height:100vh; height:100dvh; margin:0 auto; position:relative; background:#000; overflow:hidden; }
+  .feed{ height:100%; overflow-y:scroll; scroll-snap-type:y mandatory; -webkit-overflow-scrolling:touch; }
+  .feed::-webkit-scrollbar{display:none;}
+  .reel{ height:100vh; height:100dvh; width:100%; scroll-snap-align:start; position:relative; display:flex; align-items:center; justify-content:center; background:#000; }
+  .reel iframe{ width:100%; height:100%; border:none; pointer-events:none; }
+  .tap-layer{ position:absolute; inset:0; z-index:5; }
+  .heart-burst{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) scale(0); font-size:90px; z-index:20; pointer-events:none; filter:drop-shadow(0 4px 10px rgba(0,0,0,.4)); opacity:0; }
+  .heart-burst.play{ animation:burst .7s ease-out forwards; }
+  @keyframes burst{ 0%{transform:translate(-50%,-50%) scale(0);opacity:0;} 25%{transform:translate(-50%,-50%) scale(1.15);opacity:1;} 45%{transform:translate(-50%,-50%) scale(1);opacity:1;} 100%{transform:translate(-50%,-50%) scale(1);opacity:0;} }
+  .meta{ position:absolute; left:16px; right:80px; bottom:90px; z-index:10; color:var(--text); }
+  .meta .cat{ display:inline-block; font-size:11px; font-weight:700; background:rgba(37,99,235,.85); padding:4px 10px; border-radius:20px; margin-bottom:8px; letter-spacing:.3px; }
+  .meta .badge{ display:inline-block; font-size:10px; font-weight:800; background:rgba(239,68,68,.9); padding:3px 8px; border-radius:20px; margin-left:6px; letter-spacing:.3px; }
+  .meta h2{ font-size:17px; font-weight:700; margin-bottom:4px; text-shadow:0 1px 4px rgba(0,0,0,.5); }
+  .meta .sub{ font-size:12.5px; color:var(--muted); }
+  .rail{ position:absolute; right:12px; bottom:90px; z-index:10; display:flex; flex-direction:column; align-items:center; gap:20px; }
+  .rail-btn{ display:flex; flex-direction:column; align-items:center; gap:4px; color:#fff; background:none; border:none; font-size:11px; font-weight:600; }
+  .rail-icon{ width:46px; height:46px; border-radius:50%; background:rgba(255,255,255,.12); backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; font-size:22px; transition:transform .15s; }
+  .rail-btn.active .rail-icon{ background:rgba(239,68,68,.9); transform:scale(1.05); }
+  .rail-btn:active .rail-icon{ transform:scale(.9); }
+  .topbar{ position:absolute; top:0; left:0; right:0; z-index:15; padding:16px 16px 30px; display:flex; align-items:center; justify-content:space-between; background:linear-gradient(to bottom, rgba(0,0,0,.55), transparent); }
+  .logo{ color:#fff; font-weight:800; font-size:18px; letter-spacing:-.3px; }
+  .loop-badge{ font-size:11px; font-weight:700; color:#fff; background:rgba(255,255,255,.12); backdrop-filter:blur(6px); padding:5px 12px; border-radius:20px; }
+  .bottomnav{ position:absolute; bottom:0; left:0; right:0; z-index:15; height:64px; display:flex; align-items:center; justify-content:space-around; background:rgba(0,0,0,.55); backdrop-filter:blur(8px); }
+  .nav-btn{ background:none; border:none; color:#fff; font-size:22px; display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .nav-btn span{ font-size:10px; color:var(--muted); font-weight:600; }
+  .nav-btn.active span{ color:#fff; }
+  .sheet-overlay{ position:absolute; inset:0; background:rgba(0,0,0,.6); z-index:30; display:flex; align-items:flex-end; }
+  .sheet{ background:#111; width:100%; border-radius:20px 20px 0 0; padding:22px 20px 30px; color:#fff; }
+  .sheet h2{ font-size:18px; margin-bottom:16px; }
+  .field{ margin-bottom:14px; }
+  .field label{ display:block; font-size:11px; color:var(--muted); font-weight:600; margin-bottom:6px; }
+  .field input, .field select{ width:100%; padding:11px 12px; border-radius:10px; border:1px solid #333; background:#1a1a1a; color:#fff; font-size:14px; font-family:inherit; }
+  .btn-primary{ width:100%; background:var(--accent); color:#fff; border:none; padding:13px; border-radius:12px; font-weight:700; font-size:14px; margin-top:6px; }
+  .btn-close{ position:absolute; top:14px; right:16px; background:none; border:none; color:#fff; font-size:20px; }
+  .loading{ color:#9CA3AF; text-align:center; padding-top:45vh; font-size:13px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="topbar">
+    <div class="logo">ReelRank</div>
+    <div class="loop-badge" id="loopBadge">Loop 1 · Explore</div>
+  </div>
+
+  <div class="feed" id="feed"><div class="loading">Loading feed…</div></div>
+
+  <div class="bottomnav">
+    <button class="nav-btn active"><span style="font-size:20px;">⌂</span><span>Feed</span></button>
+    <button class="nav-btn" onclick="openUpload()"><span style="font-size:20px;">＋</span><span>Upload</span></button>
+  </div>
+
+  <div id="uploadSheet" class="sheet-overlay" style="display:none;">
+    <div class="sheet">
+      <button class="btn-close" onclick="closeUpload()">✕</button>
+      <h2>Add a Reel</h2>
+      <div class="field"><label>YouTube URL or ID</label><input id="upUrl" placeholder="dQw4w9WgXcQ"></div>
+      <div class="field"><label>Title</label><input id="upTitle" placeholder="My Reel"></div>
+      <div class="field"><label>Category</label>
+        <select id="upCat">
+          <option>Sports</option><option>Gaming</option><option>Food</option><option>Tech</option><option>Movies</option>
+        </select>
+      </div>
+      <button class="btn-primary" onclick="addVideo()">Add</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = "http://127.0.0.1:8000";
+const USER_ID = "demo-user";
+
+let videos = [];         // full ordered list rendered so far
+let loopNumber = 1;
+let fetchingPredict = false;
+let fetchingNextLoop = false;
+let observer = null;
+const reelScores = {};   // video_id -> accumulated score (client-side mirror of the server's domain scoring, per-video granularity). Inspect anytime with: console.table(reelScores)
+
+function ytId(url){
+  const m = url.match(/(?:v=|youtu\.be\/|shorts\/|embed\/)([A-Za-z0-9_-]{6,})/);
+  return m ? m[1] : url;
+}
+
+async function loadInitial(){
+  document.getElementById('feed').innerHTML = '<div class="loading">Loading feed…</div>';
+  document.getElementById('loopBadge').textContent = `Loop ${loopNumber} · Exploring…`;
+  try {
+    const res = await fetch(`${API_BASE}/feed/start?user_id=${USER_ID}`);
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    document.getElementById('feed').innerHTML = '';
+    videos = [];
+    appendVideos(data, 'explore');
+    tagTrigger(data.length - 1, 'predict'); // last of the 10 -> fetch predict
+  } catch (err) {
+    document.getElementById('feed').innerHTML =
+      `<div class="loading">Can't reach backend.<br>Is uvicorn running on ${API_BASE}?</div>`;
+    console.error(err);
+  }
+}
+
+async function loadPredict(){
+  if (fetchingPredict) return;
+  fetchingPredict = true;
+  document.getElementById('loopBadge').textContent = `Loop ${loopNumber} · Predicting…`;
+  try {
+    const res = await fetch(`${API_BASE}/feed/predict?user_id=${USER_ID}`);
+    const data = await res.json();
+    const startIdx = videos.length;
+    appendVideos(data, 'predict');
+    document.getElementById('loopBadge').textContent = `Loop ${loopNumber} · Predicted: ${data[0]?.category ?? '?'}`;
+    tagTrigger(videos.length - 1, 'loop'); // last of the 2 -> fetch next loop
+  } catch (err) {
+    console.error('predict failed', err);
+  }
+}
+
+async function loadNextLoop(){
+  if (fetchingNextLoop) return;
+  fetchingNextLoop = true;
+  loopNumber++;
+  document.getElementById('loopBadge').textContent = `Loop ${loopNumber} · Exploring…`;
+  try {
+    const res = await fetch(`${API_BASE}/feed/start?user_id=${USER_ID}`);
+    const data = await res.json();
+    appendVideos(data, 'explore');
+    tagTrigger(videos.length - 1, 'predict');
+    fetchingNextLoop = false;
+    fetchingPredict = false; // reset guard for the new loop's predict trigger
+  } catch (err) {
+    console.error('next loop failed', err);
+  }
+}
+
+function appendVideos(list, phase){
+  const feed = document.getElementById('feed');
+  const startIdx = videos.length;
+  list.forEach((v, j) => {
+    const idx = startIdx + j;
+    videos.push({ ...v, video_id: v.id, liked: false, phase });
+  });
+
+  const html = list.map((v, j) => {
+    const idx = startIdx + j;
+    const isPredict = phase === 'predict';
+    return `
+    <div class="reel" data-idx="${idx}">
+      <iframe id="frame-${idx}" data-src="${v.embed_url}" src="" allow="autoplay; encrypted-media"></iframe>
+      <div class="tap-layer" ontouchend="handleTap(event,${idx})" onclick="handleTap(event,${idx})"></div>
+      <div class="heart-burst" id="burst-${idx}">❤️</div>
+
+      <div class="meta">
+        <span class="cat">${v.category}</span>${isPredict ? '<span class="badge">FOR YOU</span>' : ''}
+        <h2>${v.title}</h2>
+        <div class="sub">@${v.creator}</div>
+      </div>
+
+      <div class="rail">
+        <button class="rail-btn" id="likebtn-${idx}" onclick="event.stopPropagation(); toggleLike(${idx})">
+          <div class="rail-icon">🤍</div>
+          <span id="likecount-${idx}">${v.likes}</span>
+        </button>
+        <button class="rail-btn" id="mutebtn-${idx}" onclick="event.stopPropagation(); toggleMute(${idx})">
+          <div class="rail-icon">🔇</div>
+          <span>Unmute</span>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+
+  feed.insertAdjacentHTML('beforeend', html);
+
+  document.querySelectorAll(`.reel`).forEach(r => {
+    const idx = parseInt(r.dataset.idx);
+    if (idx >= startIdx) observer.observe(r);
+  });
+}
+
+function tagTrigger(idx, type){
+  const el = document.querySelector(`.reel[data-idx="${idx}"]`);
+  if (el) el.dataset.trigger = type;
+}
+
+function setupObserver(){
+  observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      const el = entry.target;
+      const idx = el.dataset.idx;
+      const iframe = document.getElementById('frame-' + idx);
+
+      if (entry.isIntersecting && entry.intersectionRatio > 0.6) {
+        const src = iframe.dataset.src;
+        const sep = src.includes('?') ? '&' : '?';
+        iframe.src = `${src}${sep}autoplay=1&mute=1&controls=0&loop=1&enablejsapi=1`;
+
+        if (el.dataset.trigger === 'predict') loadPredict();
+        if (el.dataset.trigger === 'loop') loadNextLoop();
+      } else {
+        iframe.src = '';
+      }
+    });
+  }, { threshold: [0, 0.6, 1] });
+}
+
+let lastTap = {};
+function handleTap(e, idx){
+  const now = Date.now();
+  if(lastTap[idx] && now - lastTap[idx] < 300){
+    if(!videos[idx].liked) toggleLike(idx);
+    playBurst(idx);
+    lastTap[idx] = 0;
+  } else {
+    lastTap[idx] = now;
+  }
+}
+
+function playBurst(idx){
+  const el = document.getElementById('burst-'+idx);
+  el.classList.remove('play');
+  void el.offsetWidth;
+  el.classList.add('play');
+}
+
+function toggleLike(idx){
+  const v = videos[idx];
+  v.liked = !v.liked;
+  v.likes += v.liked ? 1 : -1;
+  const btn = document.getElementById('likebtn-'+idx);
+  btn.classList.toggle('active', v.liked);
+  btn.querySelector('.rail-icon').textContent = v.liked ? '❤️' : '🤍';
+  document.getElementById('likecount-'+idx).textContent = v.likes;
+  if (v.liked) recordInteraction(idx, 'like');
+}
+
+function toggleMute(idx){
+  const iframe = document.getElementById('frame-'+idx);
+  const btn = document.getElementById('mutebtn-'+idx);
+  const willUnmute = btn.querySelector('span').textContent === 'Unmute';
+  iframe.contentWindow.postMessage(JSON.stringify({
+    event: 'command', func: willUnmute ? 'unMute' : 'mute', args: []
+  }), '*');
+  btn.querySelector('.rail-icon').textContent = willUnmute ? '🔊' : '🔇';
+  btn.querySelector('span').textContent = willUnmute ? 'Mute' : 'Unmute';
+}
+
+function updateReelScore(v, type, watchSeconds){
+  let weight = 0;
+  if (type === 'like') weight = 10;
+  else if (type === 'skip') weight = -5;
+  else if (type === 'watch' && watchSeconds) weight = 50 * Math.min(watchSeconds / (v.duration_seconds || 60), 1);
+
+  if (!reelScores[v.video_id]) {
+    reelScores[v.video_id] = { title: v.title, category: v.category, score: 0 };
+  }
+  reelScores[v.video_id].score += weight;
+  console.log(`[score] ${v.title} (${v.category}) -> ${reelScores[v.video_id].score.toFixed(1)}`);
+  console.table(reelScores);
+}
+
+async function recordInteraction(idx, type, watchSeconds){
+  const v = videos[idx];
+  updateReelScore(v, type, watchSeconds);
+  try {
+    await fetch(`${API_BASE}/interactions`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ user_id: USER_ID, video_id: v.video_id, type, watch_seconds: watchSeconds ?? null })
+    });
+  } catch (err) { console.error('interaction failed', err); }
+}
+
+function openUpload(){ document.getElementById('uploadSheet').style.display='flex'; }
+function closeUpload(){ document.getElementById('uploadSheet').style.display='none'; }
+
+async function addVideo(){
+  const url = document.getElementById('upUrl').value.trim();
+  const title = document.getElementById('upTitle').value.trim();
+  const category = document.getElementById('upCat').value;
+  if(!url || !title){ alert('need url + title'); return; }
+
+  const payload = {
+    id: crypto.randomUUID().slice(0, 12),
+    title, category, creator: "You",
+    source: "youtube", youtube_id: ytId(url),
+    duration_seconds: 60, tags: []
+  };
+
+  try {
+    const res = await fetch(`${API_BASE}/videos`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+    });
+    if (!res.ok) { const err = await res.json(); alert('Upload failed: ' + (err.detail || res.status)); return; }
+  } catch (err) { alert('Could not reach backend.'); return; }
+
+  document.getElementById('upUrl').value='';
+  document.getElementById('upTitle').value='';
+  closeUpload();
+}
+
+setupObserver();
+loadInitial();
+</script>
+</body>
+</html>
